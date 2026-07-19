@@ -37,7 +37,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
 .tabs button{flex:1;border:none;background:transparent;color:var(--tm);padding:8px;font-size:.8rem;font-weight:600;cursor:pointer;transition:.2s}
 .tabs button.on{background:var(--acc);color:#fff}
 /* Cards */
-.card{background:rgba(0,0,0,.2);border-radius:8px;padding:14px;margin-bottom:10px}
+.card{background:rgba(0,0,0,.2);border-radius:8px;padding:14px;margin:0 0 10px 0!important;display:block!important;clear:both}
 .card h3{font-size:.95rem;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
 .card .cname{color:var(--tm);font-weight:400}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
@@ -388,42 +388,58 @@ function renderM1Tab(){
   return h;
 }
 async function renderJournalTab(){
-  let h='';
-  h+='<div class="row"><input id="inCode" placeholder="代码" maxlength="10" autocomplete="off" style="width:90px"><select id="inMkt"><option value="sz">深</option><option value="sh">沪</option><option value="hk">港</option><option value="us">美</option></select><input id="inName" placeholder="名称" maxlength="20" style="flex:1;min-width:100px"><span class="name-hint" id="nameHint" style="font-size:.75rem;color:var(--buy)"></span><button class="btn btn-sm" id="btnAdd">+ 添加</button></div>';
-  h+='<p style="color:var(--tm);font-size:.8rem;margin-bottom:10px">📅 '+fmt(date)+' 盘后 → 明天('+fmt(shift(date,1))+')的操作计划</p>';
-  if(stocks.length===0){h+='<div class="empty"><div class="icon">📋</div><p>还没有添加股票</p></div>';return h;}
+  let h=[];
+  h.push('<div class="row" style="margin-bottom:4px">');
+  h.push('<input id="inCode" placeholder="代码" maxlength="10" autocomplete="off" style="width:90px">');
+  h.push('<select id="inMkt"><option value="sz">深</option><option value="sh">沪</option><option value="hk">港</option><option value="us">美</option></select>');
+  h.push('<input id="inName" placeholder="名称" maxlength="20" style="flex:1;min-width:100px">');
+  h.push('<span class="name-hint" id="nameHint" style="font-size:.75rem;color:var(--buy)"></span>');
+  h.push('<button class="btn btn-sm" id="btnAdd">+ 添加</button></div>');
+  h.push('<p style="color:var(--tm);font-size:.8rem;margin-bottom:10px">📅 '+fmt(date)+' 盘后 → 明天('+fmt(shift(date,1))+')的操作计划</p>');
+  if(stocks.length===0){h.push('<div class="empty"><div class="icon">📋</div><p>还没有添加股票</p></div>');return h.join('');}
   for(const s of stocks){
     const plan=plans.find(p=>p.stock_id===s.id&&p.plan_date===shift(date,1)),pfx='plan_'+s.id;
     const ad=plan?plan.a_decision||'':'',bd=plan?plan.b_decision||'':'';
-    const saved=!!plan,aSaved=plan&&(plan.a_decision||plan.a_view),bSaved=plan&&(plan.b_decision||plan.b_view);
-    h+='<div class="card" id="jcard_'+s.id+'"><h3><span>'+esc(s.code)+' <span class="cname">'+esc(s.name)+'</span></span><span><button class="btn btn-sm btn-danger" data-stop="'+s.id+'">停追</button> <button class="btn btn-sm" style="background:transparent;color:var(--td);border:1px solid var(--b)" data-del="'+s.id+'">删除</button></span></h3>';
-    // A view
-    h+='<div class="views-grid"><div class="col"><h4>👤 A 的观点</h4>';
+    const aSaved=plan&&(plan.a_decision||plan.a_view),bSaved=plan&&(plan.b_decision||plan.b_view);
+    // Card start
+    h.push('<div class="card" id="jcard_'+s.id+'">');
+    h.push('<h3><span>'+esc(s.code)+' <span class="cname">'+esc(s.name)+'</span></span>');
+    h.push('<span><button class="btn btn-sm btn-danger" data-stop="'+s.id+'">停追</button> ');
+    h.push('<button class="btn btn-sm" style="background:transparent;color:var(--td);border:1px solid var(--b)" data-del="'+s.id+'">删除</button></span></h3>');
+    // Views grid
+    h.push('<div class="views-grid">');
+    // A col
+    h.push('<div class="col"><h4>👤 A 的观点</h4>');
     if(person==='A'){
-      h+='<div class="dec-btns" id="'+pfx+'_abtns">';for(const[k,v]of Object.entries(DECISIONS))h+='<button class="dec-btn'+(ad===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_ad|'+k+'">'+v+'</button>';h+='</div>';
-      h+='<input type="hidden" id="'+pfx+'_ad" value="'+esc(ad)+'"><textarea id="'+pfx+'_av" placeholder="A的分析理由...">'+esc(plan?plan.a_view||'':'')+'</textarea>';
-      h+='<div style="margin-top:6px"><button class="btn btn-sm" data-save="'+s.id+'|A">💾 保存A的观点</button>'+(aSaved?' <span class="tag tag-followed">已保存</span>':'')+'</div>';
+      h.push('<div class="dec-btns" id="'+pfx+'_abtns">');
+      for(const[k,v]of Object.entries(DECISIONS))h.push('<button class="dec-btn'+(ad===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_ad|'+k+'">'+v+'</button>');
+      h.push('</div>');
+      h.push('<input type="hidden" id="'+pfx+'_ad" value="'+esc(ad)+'">');
+      h.push('<textarea id="'+pfx+'_av" placeholder="A的分析理由...">'+esc(plan?plan.a_view||'':'')+'</textarea>');
+      h.push('<div style="margin-top:6px"><button class="btn btn-sm" data-save="'+s.id+'|A">💾 保存A的观点</button>'+(aSaved?' <span class="tag tag-followed">已保存</span>':'')+'</div>');
     }else{
-      h+='<div style="font-size:.85rem;color:var(--tm)">'+(ad?esc(DECISIONS[ad]||ad):'未填写')+'</div>';
-      if(plan&&plan.a_view)h+='<div style="font-size:.78rem;color:var(--tm);margin-top:4px">'+esc(plan.a_view)+'</div>';
+      h.push('<div style="font-size:.85rem;color:var(--tm)">'+(ad?esc(DECISIONS[ad]||ad):'未填写')+'</div>');
+      if(plan&&plan.a_view)h.push('<div style="font-size:.78rem;color:var(--tm);margin-top:4px">'+esc(plan.a_view)+'</div>');
     }
-    h+='</div>';
-    // B view
-    h+='<div class="col"><h4>👤 B 的观点</h4>';
+    h.push('</div>'); // close col A
+    // B col
+    h.push('<div class="col"><h4>👤 B 的观点</h4>');
     if(person==='B'){
-      h+='<div class="dec-btns" id="'+pfx+'_bbtns">';for(const[k,v]of Object.entries(DECISIONS))h+='<button class="dec-btn'+(bd===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_bd|'+k+'">'+v+'</button>';h+='</div>';
-      h+='<input type="hidden" id="'+pfx+'_bd" value="'+esc(bd)+'"><textarea id="'+pfx+'_bv" placeholder="B的分析理由...">'+esc(plan?plan.b_view||'':'')+'</textarea>';
-      h+='<div style="margin-top:6px"><button class="btn btn-sm" data-save="'+s.id+'|B">💾 保存B的观点</button>'+(bSaved?' <span class="tag tag-followed">已保存</span>':'')+'</div>';
+      h.push('<div class="dec-btns" id="'+pfx+'_bbtns">');
+      for(const[k,v]of Object.entries(DECISIONS))h.push('<button class="dec-btn'+(bd===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_bd|'+k+'">'+v+'</button>');
+      h.push('</div>');
+      h.push('<input type="hidden" id="'+pfx+'_bd" value="'+esc(bd)+'">');
+      h.push('<textarea id="'+pfx+'_bv" placeholder="B的分析理由...">'+esc(plan?plan.b_view||'':'')+'</textarea>');
+      h.push('<div style="margin-top:6px"><button class="btn btn-sm" data-save="'+s.id+'|B">💾 保存B的观点</button>'+(bSaved?' <span class="tag tag-followed">已保存</span>':'')+'</div>');
     }else{
-      h+='<div style="font-size:.85rem;color:var(--tm)">'+(bd?esc(DECISIONS[bd]||bd):'未填写')+'</div>';
-      if(plan&&plan.b_view)h+='<div style="font-size:.78rem;color:var(--tm);margin-top:4px">'+esc(plan.b_view)+'</div>';
+      h.push('<div style="font-size:.85rem;color:var(--tm)">'+(bd?esc(DECISIONS[bd]||bd):'未填写')+'</div>');
+      if(plan&&plan.b_view)h.push('<div style="font-size:.78rem;color:var(--tm);margin-top:4px">'+esc(plan.b_view)+'</div>');
     }
-    h+='</div></div>';
-    // Consensus (both can edit)
-    h+='<div style="margin-bottom:8px"><div class="label-row"><span>🎯 共识</span></div><textarea id="'+pfx+'_cs" placeholder="讨论后达成的共识...">'+esc(plan?plan.consensus||'':'')+'</textarea></div>';
-    h+='<button class="btn btn-sm btn-out" data-save="'+s.id+'|consensus">💾 保存共识</button>';
+    h.push('</div>'); // close col B
+    h.push('</div>'); // close views-grid
+    h.push('</div>'); // close card
   }
-  return h;
+  return h.join('');
 }
 async function renderReviewTab(){
   let h='';h+='<p style="color:var(--tm);font-size:.8rem;margin-bottom:10px">📅 近两周回顾</p>';
