@@ -652,14 +652,14 @@ function renderM2(){
 
 // ─── M3: 市场信息（手动链接）───
 let notes=[],showNoteForm=false;
-async function loadM3(){try{notes=await get(`/rest/v1/market_notes?select=*&note_date=eq.${date}&order=created_at.desc`);}catch(e){notes=[]}}
+async function loadM3(){try{const all=await get('/rest/v1/market_notes?select=*&order=created_at.desc');notes=all.filter(n=>n.note_date<=date&&(!n.active_until||n.active_until>date));}catch(e){notes=[]}}
 function closeNoteForm(){showNoteForm=false;renderM3();}
 async function addNote(){
   const t=Q('#nTitle').value.trim(),u=Q('#nUrl').value.trim(),sm=Q('#nSummary').value.trim(),s=Q('#nSource').value;
   if(!t)return toast('请输入标题');
   await post('/rest/v1/market_notes',{note_date:date,source:s,title:t,url:u,summary:sm});toast('已添加');closeNoteForm();await loadM3();renderM3();
 }
-window.delNote=async function(id){await del(`/rest/v1/market_notes?id=eq.${id}`);toast('已删除');await loadM3();renderM3();};
+window.delNote=async function(id){await patch(`/rest/v1/market_notes?id=eq.${id}`,{active_until:today()});toast('已移除');await loadM3();renderM3();};
 function renderM3(){
   const ct=Q('#m3');let h='';
   if(showNoteForm){
