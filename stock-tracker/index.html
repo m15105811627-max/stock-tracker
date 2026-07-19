@@ -224,6 +224,14 @@ textarea{width:100%;resize:vertical}
 <div class="toast" id="toast"></div>
 
 <script>
+// ─── Password ───
+const PWD='2026st'; // 改成你和老公知道的密码
+if(localStorage.getItem('auth')!==PWD){
+  const p=prompt('请输入看板密码：');
+  if(p===PWD){localStorage.setItem('auth',PWD);location.reload()}
+  else{document.body.innerHTML='<div style="text-align:center;padding:80px 20px;color:#ef4444;font-size:1.2rem;background:#0f172a;min-height:100vh">🔒 密码错误<br><span style="font-size:.9rem;color:#94a3b8">请刷新页面重试</span></div>'}
+}else{
+
 // ─── Config ───
 const API={url:'https://wkhxlgxicirbfyjoelbi.supabase.co',key:'sb_publishable_029D-rP7Zdo2dgF4WrniTQ_SMaPVTqT'};
 const HG={apikey:API.key,Authorization:'Bearer '+API.key};
@@ -478,6 +486,28 @@ async function editHoldingInline(id,field){
   await patch(`/rest/v1/holdings?id=eq.${id}`,{[field]:n});await loadM2();renderM2();
 }
 async function delHolding(id){if(!confirm('删除该持仓记录？'))return;await del(`/rest/v1/holdings?id=eq.${id}`);toast('已删除');await loadM2();renderM2();}
+async function sellStock(id){
+  const hd=holdings.find(x=>x.id===id);if(!hd)return;
+  const sh=parseFloat(prompt('卖出股数：',''));if(!sh||sh<=0||sh>hd.shares)return toast('无效股数');
+  const pr=parseFloat(prompt('卖出价格：',(hd.current_price||hd.avg_cost).toFixed(2)));if(!pr||pr<=0)return toast('无效价格');
+  const proceeds=sh*pr,remaining=hd.shares-sh;
+  const cash=loadCash();cash.amount+=proceeds;localStorage.setItem('cash_amt',cash.amount);
+  if(remaining<=0.001){await del(`/rest/v1/holdings?id=eq.${id}`);toast('已清仓，现金 +'+cash.currency+proceeds.toFixed(2))}
+  else{await patch(`/rest/v1/holdings?id=eq.${id}`,{shares:remaining});toast('卖出 '+sh+' 股，现金 +'+cash.currency+proceeds.toFixed(2)+'，剩余 '+remaining+' 股')}
+  await loadM2();renderM2();
+}
+async function buyStock(id){
+  const hd=holdings.find(x=>x.id===id);if(!hd)return;
+  const sh=parseFloat(prompt('买入股数：',''));if(!sh||sh<=0)return toast('无效股数');
+  const pr=parseFloat(prompt('买入价格：',(hd.current_price||hd.avg_cost).toFixed(2)));if(!pr||pr<=0)return toast('无效价格');
+  const cost=sh*pr;
+  const cash=loadCash();if(cash.amount<cost)return toast('现金不足！需要 '+cash.currency+cost.toFixed(2)+'，余额 '+cash.currency+cash.amount.toFixed(2));
+  cash.amount-=cost;localStorage.setItem('cash_amt',cash.amount);
+  const newShares=hd.shares+sh,newAvg=(hd.shares*hd.avg_cost+cost)/newShares;
+  await patch(`/rest/v1/holdings?id=eq.${id}`,{shares:newShares,avg_cost:newAvg});
+  toast('买入 '+sh+' 股，成本 '+cash.currency+cost.toFixed(2)+'，均价 '+newAvg.toFixed(3));
+  await loadM2();renderM2();
+}
 function stopLossPct(hd){return hd.avg_cost>0?((hd.current_price||0)-hd.avg_cost)/hd.avg_cost*100:0;}
 
 function renderM2(){
@@ -524,7 +554,7 @@ function renderM2(){
       const mv=hd.shares*p,tc=hd.shares*hd.avg_cost;
       const pnl=mv-tc,pnlPct=tc>0?(pnl/tc*100):0;
       const weight=totalVal>0?(mv/totalVal*100):0;
-      const slWarn=stopLossPct(hd)<-10; // stop loss alert
+      const slWarn=stopLossPct(hd)<-20; // stop loss at -20%
       const riskWarn=weight>30; // position too heavy
       const rowCls=(riskWarn||slWarn)?' class="risk-warn"':'';
       const barW=Math.min(Math.abs(pnl)/maxPnl*100,100);
@@ -539,9 +569,10 @@ function renderM2(){
       const costWeight=totalCost>0?(tc/totalCost*100):0;
       h+='<td><div style="font-size:.75rem">'+weight.toFixed(1)+'%</div><div class="wbar"><div class="wbar-fill" style="width:'+weight+'%"></div></div></td>';
       h+='<td><div style="font-size:.75rem">'+costWeight.toFixed(1)+'%</div><div class="wbar"><div class="wbar-fill" style="width:'+costWeight+'%"></div></div></td>';
-      h+='<td><button class="btn btn-sm btn-danger" onclick="delHolding('+hd.id+')">删除</button>';
-      if(slWarn)h+=' <span class="tag tag-deviated">止损</span>';
-      if(riskWarn)h+=' <span class="tag tag-deviated">重仓</span>';
+      h+='<td>';
+      if(slWarn)h+='<span class="tag tag-deviated">止损</span> ';
+      if(riskWarn)h+='<span class="tag tag-deviated">重仓</span> ';
+      h+='<button class="btn btn-sm" style="background:var(--sell);color:#fff;border:none" onclick="sellStock('+hd.id+')">卖出</button> <button class="btn btn-sm" style="background:var(--buy);color:#fff;border:none" onclick="buyStock('+hd.id+')">买入</button> <button class="btn btn-sm btn-danger" onclick="delHolding('+hd.id+')">删除</button>';
       h+='</td></tr>';
     }
     h+='</tbody></table></div>';
@@ -595,6 +626,15 @@ function renderM3(){
   const bc=Q('#btnCancelN');if(bc)bc.onclick=closeNoteForm;
 }
 
+// ─── Module collapse ───
+function toggleModule(id){
+  const body=document.getElementById(id),tgl=document.getElementById(id+'_tgl');
+  if(!body||!tgl)return;
+  const hidden=body.classList.toggle('hidden');
+  tgl.classList.toggle('folded',hidden);
+  localStorage.setItem('mod_'+id,hidden?'hidden':'show');
+}
+
 // ─── Main init ───
 function initModules(){
   ['m1body','m2body','m3body'].forEach(id=>{
@@ -633,6 +673,7 @@ async function goDate(d){date=d;Q('#dInput').value=d;await loadM1();await render
 // Poll every 60s
 setInterval(async()=>{await loadM1();await loadM2();await loadM3();},60000);
 init();
+} // end password check
 </script>
 </body>
 </html>
