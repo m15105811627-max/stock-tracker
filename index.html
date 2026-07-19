@@ -261,7 +261,7 @@ function toast(m){const t=Q('#toast');t.textContent=m;t.classList.add('on');clea
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function fmt(d){const[y,m,day]=d.split('-');return y+'年'+parseInt(m)+'月'+parseInt(day)+'日'}
 function isToday(d){return d===new Date().toISOString().slice(0,10)}
-function shift(d,n){const dt=new Date(d+'T00:00:00');dt.setDate(dt.getDate()+n);return dt.toISOString().slice(0,10)}
+function shift(d,n){const[y,m,day]=d.split('-').map(Number);const dt=new Date(Date.UTC(y,m-1,day+n));return dt.toISOString().slice(0,10)}
 function today(){return new Date().toISOString().slice(0,10)}
 function mktCode(c,m){if(m==='hk')return'116';if(m==='us')return'105';return c.startsWith('6')?'1':'0'}
 function exg(c,m){if(m==='hk')return'hk';if(m==='us')return'us';return m||(c.startsWith('6')?'sh':'sz')}
@@ -295,7 +295,7 @@ async function loadM1(){
     const all=await get('/rest/v1/stocks?select=*&order=created_at.asc');
     stocks=all.filter(s=>{const f=s.active_from||'2000-01-01';const u=s.active_until||'2099-12-31';return f<=date&&u>=date;});
   }catch(e){stocks=[]}
-  try{plans=await get(`/rest/v1/daily_plans?select=*&plan_date=eq.${date}`);}catch(e){plans=[]}
+  try{plans=await get(`/rest/v1/daily_plans?select=*&or=(plan_date.eq.${date},plan_date.eq.${shift(date,1)})`);}catch(e){plans=[]}
   try{logs=await get(`/rest/v1/execution_logs?select=*&log_date=eq.${date}`);}catch(e){logs=[]}
 }
 async function addStock(){
@@ -314,18 +314,32 @@ async function delStock(id){
   await del(`/rest/v1/judgments?stock_id=eq.${id}`);await del(`/rest/v1/daily_plans?stock_id=eq.${id}`);await del(`/rest/v1/execution_logs?plan_id=eq.${id}`);await del(`/rest/v1/stocks?id=eq.${id}`);
   toast('已永久删除');await loadM1();renderM1();
 }
-async function savePlan(sid){
-  const pfx='plan_'+sid;
-  const ad=Q('#'+pfx+'_ad').value,bd=Q('#'+pfx+'_bd').value;
-  const body={stock_id:sid,plan_date:date,a_decision:ad,b_decision:bd,
-    a_view:Q('#'+pfx+'_av').value.trim(),b_view:Q('#'+pfx+'_bv').value.trim(),
-    consensus:Q('#'+pfx+'_cs').value.trim()};
-  const ex=plans.find(p=>p.stock_id===sid);
-  try{if(ex)await patch(`/rest/v1/daily_plans?id=eq.${ex.id}`,body);else await post('/rest/v1/daily_plans',body);toast('计划已保存');await loadM1();renderM1();}catch(e){toast('保存失败：'+e.message)}
+async function savePlan(sid, savePerson){
+  const pfx='plan_'+sid,nextDate=shift(date,1);
+  const ex=plans.find(p=>p.stock_id===sid&&p.plan_date===nextDate);
+  const body={stock_id:sid,plan_date:nextDate};
+  // Preserve existing values for the other person
+  if(ex){body.a_decision=ex.a_decision||'';body.b_decision=ex.b_decision||'';body.a_view=ex.a_view||'';body.b_view=ex.b_view||'';body.consensus=ex.consensus||''}
+  // Update current person's values
+  if(savePerson==='A'){
+    const adEl=Q('#'+pfx+'_ad'),avEl=Q('#'+pfx+'_av');
+    if(!adEl||!avEl)return toast('找不到表单元素，请刷新');
+    body.a_decision=adEl.value;body.a_view=avEl.value.trim();
+  }
+  if(savePerson==='B'){
+    const bdEl=Q('#'+pfx+'_bd'),bvEl=Q('#'+pfx+'_bv');
+    if(!bdEl||!bvEl)return toast('找不到表单元素，请刷新');
+    body.b_decision=bdEl.value;body.b_view=bvEl.value.trim();
+  }
+  if(savePerson==='consensus'){
+    const csEl=Q('#'+pfx+'_cs');if(!csEl)return;
+    body.consensus=csEl.value.trim();
+  }
+  try{if(ex)await patch(`/rest/v1/daily_plans?id=eq.${ex.id}`,body);else await post('/rest/v1/daily_plans',body);toast(pname(savePerson)+'的观点已保存');await loadM1();renderM1();}catch(e){toast('保存失败：'+e.message)}
 }
 async function logExec(pid,f){
   const pfx='exec_'+pid;const at=Q('#'+pfx+'_at').value.trim(),dr=f?'':Q('#'+pfx+'_dr').value.trim();
-  const ex=logs.find(l=>l.plan_id===pid);
+  const ex=logs.find(l=>l.plan_id===pid&&l.log_date===date);
   try{if(ex)await patch(`/rest/v1/execution_logs?id=eq.${ex.id}`,{followed:f,action_taken:at,deviation_reason:dr});else await post('/rest/v1/execution_logs',{plan_id:pid,log_date:date,followed:f,action_taken:at,deviation_reason:dr});toast(f?'✅ 按计划执行':'⚠️ 已记录偏离');await loadM1();renderM1();}catch(e){toast('保存失败：'+e.message)}
 }
 
@@ -355,7 +369,7 @@ function renderM1Tab(){
   h+='<div class="row"><input id="inCode" placeholder="代码" maxlength="10" autocomplete="off" style="width:90px"><select id="inMkt"><option value="sz">深</option><option value="sh">沪</option><option value="hk">港</option><option value="us">美</option></select><input id="inName" placeholder="名称" maxlength="20" style="flex:1;min-width:100px"><span class="name-hint" id="nameHint" style="font-size:.75rem;color:var(--buy)"></span><button class="btn btn-sm" id="btnAdd">+ 添加</button></div>';
   if(stocks.length===0){h+='<div class="empty"><div class="icon">📋</div><p>还没有添加股票</p></div>';return h;}
   for(const s of stocks){
-    const mkt=s.market||(s.code.startsWith('6')?'sh':'sz'),plan=plans.find(p=>p.stock_id===s.id),exec=logs.find(l=>plan&&l.plan_id===plan.id);
+    const mkt=s.market||(s.code.startsWith('6')?'sh':'sz'),plan=plans.find(p=>p.stock_id===s.id&&p.plan_date===date),exec=logs.find(l=>plan&&l.plan_id===plan.id);
     // K-line
     let kh='';
     if(mkt==='us')kh='<iframe src="https://s.tradingview.com/widgetembed/?symbol='+encodeURIComponent(s.code.toUpperCase())+'&interval=D&hidetoptoolbar=1&theme=dark&style=1&locale=zh_CN" style="width:100%;height:400px;border:none;border-radius:8px"></iframe>';
@@ -373,19 +387,41 @@ function renderM1Tab(){
   }
   return h;
 }
-function renderJournalTab(){
+async function renderJournalTab(){
   let h='';
   h+='<div class="row"><input id="inCode" placeholder="代码" maxlength="10" autocomplete="off" style="width:90px"><select id="inMkt"><option value="sz">深</option><option value="sh">沪</option><option value="hk">港</option><option value="us">美</option></select><input id="inName" placeholder="名称" maxlength="20" style="flex:1;min-width:100px"><span class="name-hint" id="nameHint" style="font-size:.75rem;color:var(--buy)"></span><button class="btn btn-sm" id="btnAdd">+ 添加</button></div>';
-  h+='<p style="color:var(--tm);font-size:.8rem;margin-bottom:10px">📅 '+fmt(date)+' 盘后记录</p>';
+  h+='<p style="color:var(--tm);font-size:.8rem;margin-bottom:10px">📅 '+fmt(date)+' 盘后 → 明天('+fmt(shift(date,1))+')的操作计划</p>';
   if(stocks.length===0){h+='<div class="empty"><div class="icon">📋</div><p>还没有添加股票</p></div>';return h;}
   for(const s of stocks){
-    const plan=plans.find(p=>p.stock_id===s.id),pfx='plan_'+s.id;
+    const plan=plans.find(p=>p.stock_id===s.id&&p.plan_date===shift(date,1)),pfx='plan_'+s.id;
     const ad=plan?plan.a_decision||'':'',bd=plan?plan.b_decision||'':'';
-    h+='<div class="card"><h3><span>'+esc(s.code)+' <span class="cname">'+esc(s.name)+'</span></span><span><button class="btn btn-sm btn-danger" data-stop="'+s.id+'">停追</button> <button class="btn btn-sm" style="background:transparent;color:var(--td);border:1px solid var(--b)" data-del="'+s.id+'">删除</button></span></h3>';
-    h+='<div class="views-grid"><div class="col"><h4>👤 A 的观点</h4><div class="dec-btns">';for(const[k,v]of Object.entries(DECISIONS))h+='<button class="dec-btn'+(ad===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_ad|'+k+'">'+v+'</button>';h+='</div><input type="hidden" id="'+pfx+'_ad" value="'+esc(ad)+'"><textarea id="'+pfx+'_av" placeholder="分析理由...">'+esc(plan?plan.a_view||'':'')+'</textarea></div>';
-    h+='<div class="col"><h4>👤 B 的观点</h4><div class="dec-btns">';for(const[k,v]of Object.entries(DECISIONS))h+='<button class="dec-btn'+(bd===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_bd|'+k+'">'+v+'</button>';h+='</div><input type="hidden" id="'+pfx+'_bd" value="'+esc(bd)+'"><textarea id="'+pfx+'_bv" placeholder="分析理由...">'+esc(plan?plan.b_view||'':'')+'</textarea></div></div>';
+    const saved=!!plan,aSaved=plan&&(plan.a_decision||plan.a_view),bSaved=plan&&(plan.b_decision||plan.b_view);
+    h+='<div class="card" id="jcard_'+s.id+'"><h3><span>'+esc(s.code)+' <span class="cname">'+esc(s.name)+'</span></span><span><button class="btn btn-sm btn-danger" data-stop="'+s.id+'">停追</button> <button class="btn btn-sm" style="background:transparent;color:var(--td);border:1px solid var(--b)" data-del="'+s.id+'">删除</button></span></h3>';
+    // A view
+    h+='<div class="views-grid"><div class="col"><h4>👤 A 的观点</h4>';
+    if(person==='A'){
+      h+='<div class="dec-btns" id="'+pfx+'_abtns">';for(const[k,v]of Object.entries(DECISIONS))h+='<button class="dec-btn'+(ad===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_ad|'+k+'">'+v+'</button>';h+='</div>';
+      h+='<input type="hidden" id="'+pfx+'_ad" value="'+esc(ad)+'"><textarea id="'+pfx+'_av" placeholder="A的分析理由...">'+esc(plan?plan.a_view||'':'')+'</textarea>';
+      h+='<div style="margin-top:6px"><button class="btn btn-sm" data-save="'+s.id+'|A">💾 保存A的观点</button>'+(aSaved?' <span class="tag tag-followed">已保存</span>':'')+'</div>';
+    }else{
+      h+='<div style="font-size:.85rem;color:var(--tm)">'+(ad?esc(DECISIONS[ad]||ad):'未填写')+'</div>';
+      if(plan&&plan.a_view)h+='<div style="font-size:.78rem;color:var(--tm);margin-top:4px">'+esc(plan.a_view)+'</div>';
+    }
+    h+='</div>';
+    // B view
+    h+='<div class="col"><h4>👤 B 的观点</h4>';
+    if(person==='B'){
+      h+='<div class="dec-btns" id="'+pfx+'_bbtns">';for(const[k,v]of Object.entries(DECISIONS))h+='<button class="dec-btn'+(bd===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_bd|'+k+'">'+v+'</button>';h+='</div>';
+      h+='<input type="hidden" id="'+pfx+'_bd" value="'+esc(bd)+'"><textarea id="'+pfx+'_bv" placeholder="B的分析理由...">'+esc(plan?plan.b_view||'':'')+'</textarea>';
+      h+='<div style="margin-top:6px"><button class="btn btn-sm" data-save="'+s.id+'|B">💾 保存B的观点</button>'+(bSaved?' <span class="tag tag-followed">已保存</span>':'')+'</div>';
+    }else{
+      h+='<div style="font-size:.85rem;color:var(--tm)">'+(bd?esc(DECISIONS[bd]||bd):'未填写')+'</div>';
+      if(plan&&plan.b_view)h+='<div style="font-size:.78rem;color:var(--tm);margin-top:4px">'+esc(plan.b_view)+'</div>';
+    }
+    h+='</div></div>';
+    // Consensus (both can edit)
     h+='<div style="margin-bottom:8px"><div class="label-row"><span>🎯 共识</span></div><textarea id="'+pfx+'_cs" placeholder="讨论后达成的共识...">'+esc(plan?plan.consensus||'':'')+'</textarea></div>';
-    h+='<button class="btn btn-sm" data-save="'+s.id+'">💾 保存计划</button></div>';
+    h+='<button class="btn btn-sm btn-out" data-save="'+s.id+'|consensus">💾 保存共识</button>';
   }
   return h;
 }
@@ -410,7 +446,7 @@ async function renderReviewTab(){
 }
 async function renderM1(){
   const ct=Q('#m1');jmap={};for(const j of await get(`/rest/v1/judgments?select=*&date=eq.${date}`)||[])jmap[j.stock_id+'|'+j.person]=j;
-  if(activeTab==='plan')ct.innerHTML=renderM1Tab();else if(activeTab==='journal')ct.innerHTML=renderJournalTab();else ct.innerHTML=await renderReviewTab();
+  if(activeTab==='plan')ct.innerHTML=renderM1Tab();else if(activeTab==='journal')ct.innerHTML=await renderJournalTab();else ct.innerHTML=await renderReviewTab();
   bindM1Events();
 }
 function bindM1Events(){
@@ -419,7 +455,7 @@ function bindM1Events(){
   const ce=Q('#inCode');if(ce)ce.onblur=async function(){const c=this.value.trim();if(!c)return;const gm=guessMarket(c);const me=Q('#inMkt');if(me)me.value=gm;const n=await lookupName(c,gm);if(n){const nm=Q('#inName');if(nm)nm.value=n;const nh=Q('#nameHint');if(nh)nh.textContent='✅ '+n}};
   QA('[data-del]').forEach(b=>b.onclick=function(){delStock(parseInt(this.dataset.del))});
   QA('[data-stop]').forEach(b=>b.onclick=function(){stopStock(parseInt(this.dataset.stop))});
-  QA('[data-save]').forEach(b=>b.onclick=function(){savePlan(parseInt(this.dataset.save))});
+  QA('[data-save]').forEach(b=>b.onclick=function(){const[sid,p]=this.dataset.save.split('|');savePlan(parseInt(sid),p)});
   QA('[data-exec]').forEach(b=>b.onclick=function(){const[p,f]=this.dataset.exec.split('|');const ff=f==='true';if(!ff){const d=Q('#exec_'+p+'_dr_div');if(d)d.style.display='block'}else{const d=Q('#exec_'+p+'_dr_div');if(d)d.style.display='none'}logExec(parseInt(p),ff)});
   QA('.kline-toggle').forEach(b=>b.onclick=function(){const w=Q('#kline_'+this.dataset.kid);if(w){if(w.classList.contains('show')){w.classList.remove('show');this.textContent='📊 K线'}else{w.classList.add('show');this.textContent='📊 收起'}}});
   QA('[data-dclick]').forEach(b=>b.onclick=function(){const[t,v]=this.dataset.dclick.split('|');Q('#'+t).value=v;const p=this.parentElement;p.querySelectorAll('.dec-btn').forEach(x=>{x.className='dec-btn';if(x.dataset.dclick.split('|')[1]===v)x.classList.add('sel-'+v)})});
@@ -600,14 +636,14 @@ function renderM2(){
 
 // ─── M3: 市场信息（手动链接）───
 let notes=[],showNoteForm=false;
-async function loadM3(){try{notes=await get(`/rest/v1/market_notes?select=*&note_date=eq.${date}&order=created_at.desc`);}catch(e){notes=[]}}
+async function loadM3(){try{const all=await get('/rest/v1/market_notes?select=*&order=created_at.desc');notes=all.filter(n=>n.note_date<=date&&(!n.active_until||n.active_until>=date));}catch(e){notes=[]}}
 function closeNoteForm(){showNoteForm=false;renderM3();}
 async function addNote(){
   const t=Q('#nTitle').value.trim(),u=Q('#nUrl').value.trim(),sm=Q('#nSummary').value.trim(),s=Q('#nSource').value;
   if(!t)return toast('请输入标题');
   await post('/rest/v1/market_notes',{note_date:date,source:s,title:t,url:u,summary:sm});toast('已添加');closeNoteForm();await loadM3();renderM3();
 }
-async function delNote(id){await del(`/rest/v1/market_notes?id=eq.${id}`);toast('已删除');await loadM3();renderM3();}
+async function delNote(id){await patch(`/rest/v1/market_notes?id=eq.${id}`,{active_until:today()});toast('已移除（历史保留）');await loadM3();renderM3();}
 function renderM3(){
   const ct=Q('#m3');let h='';
   if(showNoteForm){
