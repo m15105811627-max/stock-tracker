@@ -151,7 +151,7 @@ textarea{width:100%;resize:vertical}
   <div class="hd">
     <h1>📈 交易看板</h1>
     <div class="hd-ctl">
-      <div class="pbar" id="pbar"><button data-p="A">👤 梦</button><button data-p="B">👤 慧</button></div>
+      <div class="pbar" id="pbar"><button data-p="A">👤 A</button><button data-p="B">👤 B</button></div>
       <div class="dbar">
         <button id="btnPrev">◀</button><input type="date" id="dInput"><button id="btnNext">▶</button>
         <span class="today-badge" id="btnToday">今天</span>
@@ -233,7 +233,7 @@ let date=new Date().toISOString().slice(0,10),person=localStorage.getItem('sp')|
 let stocks=[],plans=[],logs=[],activeTab='plan';
 let holdings=[];
 const DECISIONS={buy:'🟢 买入',sell:'🔴 卖出',hold_position:'🟡 持仓观望',hold_empty:'🔵 空仓观望'};
-function pname(p){return p==='A'?'梦':'慧';}
+function pname(p){return p==='A'?'A':'B';}
 function currency(mkt){return mkt==='hk'?'HK$':mkt==='us'?'US$':'¥';}
 function guessMarket(code){
   if(!code)return'sz';
@@ -374,8 +374,8 @@ function renderJournalTab(){
     const plan=plans.find(p=>p.stock_id===s.id),pfx='plan_'+s.id;
     const ad=plan?plan.a_decision||'':'',bd=plan?plan.b_decision||'':'';
     h+='<div class="card"><h3><span>'+esc(s.code)+' <span class="cname">'+esc(s.name)+'</span></span><span><button class="btn btn-sm btn-danger" data-stop="'+s.id+'">停追</button> <button class="btn btn-sm" style="background:transparent;color:var(--td);border:1px solid var(--b)" data-del="'+s.id+'">删除</button></span></h3>';
-    h+='<div class="views-grid"><div class="col"><h4>👤 梦 的观点</h4><div class="dec-btns">';for(const[k,v]of Object.entries(DECISIONS))h+='<button class="dec-btn'+(ad===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_ad|'+k+'">'+v+'</button>';h+='</div><input type="hidden" id="'+pfx+'_ad" value="'+esc(ad)+'"><textarea id="'+pfx+'_av" placeholder="分析理由...">'+esc(plan?plan.a_view||'':'')+'</textarea></div>';
-    h+='<div class="col"><h4>👤 慧 的观点</h4><div class="dec-btns">';for(const[k,v]of Object.entries(DECISIONS))h+='<button class="dec-btn'+(bd===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_bd|'+k+'">'+v+'</button>';h+='</div><input type="hidden" id="'+pfx+'_bd" value="'+esc(bd)+'"><textarea id="'+pfx+'_bv" placeholder="分析理由...">'+esc(plan?plan.b_view||'':'')+'</textarea></div></div>';
+    h+='<div class="views-grid"><div class="col"><h4>👤 A 的观点</h4><div class="dec-btns">';for(const[k,v]of Object.entries(DECISIONS))h+='<button class="dec-btn'+(ad===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_ad|'+k+'">'+v+'</button>';h+='</div><input type="hidden" id="'+pfx+'_ad" value="'+esc(ad)+'"><textarea id="'+pfx+'_av" placeholder="分析理由...">'+esc(plan?plan.a_view||'':'')+'</textarea></div>';
+    h+='<div class="col"><h4>👤 B 的观点</h4><div class="dec-btns">';for(const[k,v]of Object.entries(DECISIONS))h+='<button class="dec-btn'+(bd===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_bd|'+k+'">'+v+'</button>';h+='</div><input type="hidden" id="'+pfx+'_bd" value="'+esc(bd)+'"><textarea id="'+pfx+'_bv" placeholder="分析理由...">'+esc(plan?plan.b_view||'':'')+'</textarea></div></div>';
     h+='<div style="margin-bottom:8px"><div class="label-row"><span>🎯 共识</span></div><textarea id="'+pfx+'_cs" placeholder="讨论后达成的共识...">'+esc(plan?plan.consensus||'':'')+'</textarea></div>';
     h+='<button class="btn btn-sm" data-save="'+s.id+'">💾 保存计划</button></div>';
   }
