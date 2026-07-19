@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>股票追踪看板</title>
+<style>
+/* ========== CSS Variables ========== */
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-hover: #273548;
+  --border: #334155;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+  --buy: #10b981;
+  --buy-bg: rgba(16,185,129,0.15);
+  --sell: #ef4444;
+  --sell-bg: rgba(239,68,68,0.15);
+  --hold: #f59e0b;
+  --hold-bg: rgba(245,158,11,0.15);
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+/* ========== Reset ========== */
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+button { cursor:pointer; font-family:inherit; font-size:inherit; }
+input,textarea,select { font-family:inherit; font-size:inherit; }
+
+/* ========== Layout ========== */
+.container { max-width: 960px; margin: 0 auto; padding: 16px; }
+
+/* ========== Header ========== */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; padding: 16px 0;
+  border-bottom: 1px solid var(--border); margin-bottom: 16px;
+}
+.header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+.header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* ========== Person Selector ========== */
+.person-select { display: flex; align-items: center; gap: 6px; background: var(--surface); border-radius: 20px; padding: 4px; }
+.person-btn {
+  border: none; background: transparent; color: var(--text-muted);
+  padding: 6px 14px; border-radius: 16px; font-size: 0.85rem; transition: all 0.2s;
+}
+.person-btn.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+/* ========== Date Navigation ========== */
+.date-nav { display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: 20px; padding: 4px 12px; }
+.date-nav button {
+  border: none; background: transparent; color: var(--text-muted);
+  width: 28px; height: 28px; border-radius: 50%; font-size: 1rem;
+  display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+}
+.date-nav button:hover { background: var(--surface-hover); color: var(--text); }
+.date-nav .date-input {
+  border: none; background: transparent; color: var(--text);
+  font-size: 0.9rem; font-weight: 600; width: 130px; text-align: center; padding: 4px 0; outline: none;
+}
+.date-nav .date-input::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
+.today-badge { font-size: 0.75rem; color: var(--accent); border: 1px solid var(--accent); border-radius: 10px; padding: 2px 8px; cursor: pointer; transition: all 0.15s; }
+.today-badge:hover { background: var(--accent); color: #fff; }
+
+/* ========== Add Stock Bar ========== */
+.add-bar { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.add-bar input {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); padding: 8px 12px; border-radius: var(--radius); outline: none; transition: border-color 0.2s;
+}
+.add-bar input:focus { border-color: var(--accent); }
+.add-bar input.code-input { width: 90px; }
+.add-bar input.name-input { flex: 1; min-width: 120px; }
+.btn-add {
+  background: var(--accent); color: #fff; border: none;
+  padding: 8px 18px; border-radius: var(--radius); font-weight: 600; font-size: 0.9rem; transition: background 0.2s;
+}
+.btn-add:hover { background: var(--accent-hover); }
+
+/* ========== Stock Cards ========== */
+.stock-list { display: flex; flex-direction: column; gap: 12px; }
+.stock-card { background: var(--surface); border-radius: var(--radius); padding: 16px 20px; box-shadow: var(--shadow); transition: all 0.2s; }
+.stock-card:hover { background: var(--surface-hover); }
+.stock-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.stock-info { display: flex; align-items: center; gap: 10px; }
+.stock-code { font-weight: 700; font-size: 1rem; color: var(--text); }
+.stock-name { color: var(--text-muted); font-size: 0.9rem; }
+.btn-delete {
+  border: none; background: transparent; color: var(--text-dim);
+  font-size: 1.1rem; padding: 4px 8px; border-radius: 6px; transition: all 0.15s; opacity: 0;
+}
+.stock-card:hover .btn-delete { opacity: 1; }
+.btn-delete:hover { color: var(--sell); background: var(--sell-bg); }
+
+/* ========== Judgment Area ========== */
+.judgments { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.judgment-cell {
+  background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px 14px;
+  cursor: pointer; transition: all 0.2s; border: 2px solid transparent; position: relative;
+}
+.judgment-cell:hover { border-color: var(--border); }
+.judgment-cell.empty { border-style: dashed; border-color: var(--border); }
+.judgment-cell.buy { border-color: var(--buy); background: var(--buy-bg); }
+.judgment-cell.sell { border-color: var(--sell); background: var(--sell-bg); }
+.judgment-cell.hold { border-color: var(--hold); background: var(--hold-bg); }
+.judgment-person { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; }
+.judgment-decision { display: inline-block; font-weight: 700; font-size: 0.85rem; padding: 2px 10px; border-radius: 12px; margin-bottom: 4px; }
+.decision-buy { color: var(--buy); background: var(--buy-bg); }
+.decision-sell { color: var(--sell); background: var(--sell-bg); }
+.decision-hold { color: var(--hold); background: var(--hold-bg); }
+.judgment-reason { font-size: 0.82rem; color: var(--text-muted); margin-top: 4px; line-height: 1.5; word-break: break-word; }
+.judgment-empty-text { color: var(--text-dim); font-size: 0.82rem; text-align: center; padding: 8px 0; }
+
+/* Pulse animation for real-time updates */
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(99,102,241,0); }
+  100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+}
+.judgment-cell.pulse { animation: pulse 0.8s ease-out; }
+
+/* ========== Modal ========== */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: 16px;
+}
+.modal-overlay.hidden { display: none; }
+.modal-box {
+  background: var(--surface); border-radius: 14px; padding: 24px;
+  width: 100%; max-width: 440px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.modal-box h3 { font-size: 1.1rem; margin-bottom: 4px; }
+.modal-box .modal-subtitle { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 16px; }
+.decision-group { display: flex; gap: 10px; margin-bottom: 16px; }
+.decision-option {
+  flex: 1; border: 2px solid var(--border); background: transparent;
+  color: var(--text-muted); padding: 12px 8px; border-radius: 10px;
+  font-weight: 700; font-size: 0.95rem; text-align: center; transition: all 0.2s;
+}
+.decision-option:hover { border-color: var(--text-muted); }
+.decision-option.selected-buy { border-color: var(--buy); background: var(--buy-bg); color: var(--buy); }
+.decision-option.selected-sell { border-color: var(--sell); background: var(--sell-bg); color: var(--sell); }
+.decision-option.selected-hold { border-color: var(--hold); background: var(--hold-bg); color: var(--hold); }
+.modal-box textarea {
+  width: 100%; height: 100px; background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+  padding: 12px; resize: vertical; outline: none; font-size: 0.9rem;
+}
+.modal-box textarea:focus { border-color: var(--accent); }
+.modal-actions { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+.btn-cancel { border: 1px solid var(--border); background: transparent; color: var(--text-muted); padding: 8px 20px; border-radius: 8px; font-weight: 600; transition: all 0.2s; }
+.btn-cancel:hover { background: var(--surface-hover); }
+.btn-save { border: none; background: var(--accent); color: #fff; padding: 8px 20px; border-radius: 8px; font-weight: 600; transition: background 0.2s; }
+.btn-save:hover { background: var(--accent-hover); }
+
+/* ========== Footer Stats ========== */
+.footer-stats {
+  margin-top: 20px; padding: 12px 16px; background: var(--surface);
+  border-radius: var(--radius); display: flex; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px; font-size: 0.85rem; color: var(--text-muted);
+}
+.footer-stats span { font-weight: 600; color: var(--text); }
+
+/* ========== Empty State ========== */
+.empty-state { text-align: center; padding: 48px 16px; color: var(--text-dim); }
+.empty-state .empty-icon { font-size: 3rem; margin-bottom: 12px; }
+.empty-state p { font-size: 0.95rem; }
+
+/* ========== Loading ========== */
+.loading { text-align: center; padding: 32px; color: var(--text-muted); }
+.spinner {
+  display: inline-block; width: 24px; height: 24px;
+  border: 3px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 8px; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ========== Toast ========== */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #334155; color: #e2e8f0; padding: 10px 24px; border-radius: 20px;
+  font-size: 0.85rem; font-weight: 600; z-index: 200; opacity: 0;
+  transition: opacity 0.3s; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+/* ========== Config Notice ========== */
+.config-notice {
+  background: #1e1b4b; border: 1px solid #6366f1; border-radius: var(--radius);
+  padding: 16px 20px; margin-bottom: 16px; font-size: 0.85rem; color: #c7d2fe;
+}
+.config-notice strong { color: #fff; }
+
+/* ========== Responsive ========== */
+@media (max-width: 600px) {
+  .header { flex-direction: column; align-items: flex-start; }
+  .header-controls { width: 100%; justify-content: space-between; }
+  .add-bar { flex-direction: column; }
+  .add-bar input.code-input { width: 100%; }
+  .add-bar input.name-input { width: 100%; }
+  .judgments { grid-template-columns: 1fr; gap: 8px; }
+  .stock-card { padding: 12px 14px; }
+  .modal-box { padding: 16px; }
+  .decision-group { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <h1>📈 股票追踪看板</h1>
+    <div class="header-controls">
+      <div class="person-select" id="personSelect">
+        <button class="person-btn" data-person="A">👤 A</button>
+        <button class="person-btn" data-person="B">👤 B</button>
+      </div>
+      <div class="date-nav">
+        <button id="btnPrev" title="前一天">◀</button>
+        <input type="date" class="date-input" id="dateInput">
+        <button id="btnNext" title="后一天">▶</button>
+        <span class="today-badge" id="btnToday">今天</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Config Notice -->
+  <div class="config-notice hidden" id="configNotice">
+    ⚙️ <strong>无法连接 Supabase</strong>
+  </div>
+
+  <!-- Add Stock Bar -->
+  <div class="add-bar" id="addBar" style="display:none;">
+    <input type="text" class="code-input" id="inputCode" placeholder="代码 000001" maxlength="10">
+    <input type="text" class="name-input" id="inputName" placeholder="名称 平安银行" maxlength="20">
+    <button class="btn-add" id="btnAdd">+ 添加</button>
+  </div>
+
+  <!-- Stock List -->
+  <div class="stock-list" id="stockList">
+    <div class="loading"><span class="spinner"></span>加载中...</div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer-stats" id="footer" style="display:none;">
+    <div>共 <span id="statTotal">0</span> 只股票</div>
+    <div id="statJudgments">—</div>
+  </div>
+</div>
+
+<!-- Judgment Modal -->
+<div class="modal-overlay hidden" id="modalOverlay">
+  <div class="modal-box">
+    <h3 id="modalTitle">—</h3>
+    <div class="modal-subtitle" id="modalSubtitle">—</div>
+    <div class="decision-group" id="decisionGroup">
+      <button class="decision-option" data-action="buy">🟢 买入</button>
+      <button class="decision-option" data-action="sell">🔴 卖出</button>
+      <button class="decision-option" data-action="hold">🟡 观望</button>
+    </div>
+    <textarea id="modalReason" placeholder="填写判断理由..."></textarea>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btnCancel">取消</button>
+      <button class="btn-save" id="btnSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ==================== CONFIGURATION ====================
+const API = {
+  url: 'https://wkhxlgxicirbfyjoelbi.supabase.co',
+  key: 'sb_publishable_029D-rP7Zdo2dgF4WrniTQ_SMaPVTqT'
+};
+
+// ==================== REST API HELPERS ====================
+// 直接用 fetch 调 Supabase REST API，不需要任何外部 SDK
+const H_GET = {
+  'apikey': API.key,
+  'Authorization': 'Bearer ' + API.key
+};
+// POST/PATCH 才需要 Content-Type 和 Prefer
+const H_POST = {
+  'apikey': API.key,
+  'Authorization': 'Bearer ' + API.key,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation'
+};
+
+async function apiGet(path) {
+  const r = await fetch(API.url + path, { headers: H_GET });
+  if (!r.ok) {
+    let msg = r.statusText;
+    try { msg = (await r.json()).message || msg; } catch(e) {}
+    throw new Error('HTTP ' + r.status + ' ' + msg);
+  }
+  return r.json();
+}
+
+async function apiPost(path, body) {
+  const r = await fetch(API.url + path, {
+    method: 'POST', headers: H_POST, body: JSON.stringify(body)
+  });
+  if (!r.ok) {
+    let msg = r.statusText;
+    try { msg = (await r.json()).message || msg; } catch(e) {}
+    throw new Error('HTTP ' + r.status + ' ' + msg);
+  }
+  return r.json();
+}
+
+async function apiPatch(path, body) {
+  const r = await fetch(API.url + path, {
+    method: 'PATCH', headers: H_POST, body: JSON.stringify(body)
+  });
+  if (!r.ok) {
+    let msg = r.statusText;
+    try { msg = (await r.json()).message || msg; } catch(e) {}
+    throw new Error('HTTP ' + r.status + ' ' + msg);
+  }
+}
+
+async function apiDelete(path) {
+  const r = await fetch(API.url + path, { method: 'DELETE', headers: H_GET });
+  if (!r.ok) {
+    let msg = r.statusText;
+    try { msg = (await r.json()).message || msg; } catch(e) {}
+    throw new Error('HTTP ' + r.status + ' ' + msg);
+  }
+}
+
+// ==================== STATE ====================
+let currentDate = new Date().toISOString().slice(0,10);
+let currentPerson = localStorage.getItem('stock_tracker_person') || 'A';
+let stocks = [];
+let judgmentsMap = {};  // key: "stockId|person" → judgment object
+let pollTimer = null;
+
+// ==================== DOM REFS ====================
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
+const stockList = $('#stockList');
+const dateInput = $('#dateInput');
+const modalOverlay = $('#modalOverlay');
+const modalTitle = $('#modalTitle');
+const modalSubtitle = $('#modalSubtitle');
+const modalReason = $('#modalReason');
+const decisionGroup = $('#decisionGroup');
+const toast = $('#toast');
+
+// ==================== HELPERS ====================
+function fmtDate(d) {
+  const [y,m,day] = d.split('-');
+  return `${y}年${parseInt(m)}月${parseInt(day)}日`;
+}
+function isToday(d) { return d === new Date().toISOString().slice(0,10); }
+function shiftDate(d, days) {
+  const dt = new Date(d + 'T00:00:00');
+  dt.setDate(dt.getDate() + days);
+  return dt.toISOString().slice(0,10);
+}
+function toastMsg(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+// ==================== LOAD DATA ====================
+async function loadStocks() {
+  try {
+    stocks = await apiGet('/rest/v1/stocks?select=*&order=created_at.asc');
+    console.log('✅ 已加载 ' + stocks.length + ' 只股票');
+  } catch(e) {
+    console.error('加载股票失败:', e.message);
+    toastMsg('加载失败，检查网络或刷新重试');
+  }
+}
+
+async function loadJudgments(date) {
+  try {
+    // URL 编码 date 值
+    const data = await apiGet(`/rest/v1/judgments?select=*&date=eq.${encodeURIComponent(date)}`);
+    judgmentsMap = {};
+    for (const j of (data || [])) {
+      judgmentsMap[`${j.stock_id}|${j.person}`] = j;
+    }
+  } catch(e) {
+    console.error('加载判断失败:', e.message);
+  }
+}
+
+async function loadAll() {
+  await loadStocks();
+  await loadJudgments(currentDate);
+  render();
+  updateStats();
+}
+
+// ==================== STOCK CRUD ====================
+async function addStock(code, name) {
+  if (!code.trim() || !name.trim()) return toastMsg('请输入股票代码和名称');
+  try {
+    await apiPost('/rest/v1/stocks', { code: code.trim(), name: name.trim() });
+    toastMsg('添加成功');
+    await loadAll();
+    $('#inputCode').value = '';
+    $('#inputName').value = '';
+  } catch(e) {
+    console.error('添加失败:', e);
+    toastMsg('添加失败：' + e.message);
+  }
+}
+
+async function deleteStock(stockId) {
+  if (!confirm('确定删除这只股票及其所有历史判断？')) return;
+  try {
+    // 先删关联的判断
+    await apiDelete(`/rest/v1/judgments?stock_id=eq.${stockId}`);
+    await apiDelete(`/rest/v1/stocks?id=eq.${stockId}`);
+    toastMsg('已删除');
+    await loadAll();
+  } catch(e) {
+    console.error('删除失败:', e);
+    toastMsg('删除失败：' + e.message);
+  }
+}
+
+// ==================== JUDGMENT CRUD ====================
+let editingStock = null;
+let editingPerson = null;
+let selectedAction = null;
+
+function openModal(stockId, stockName, person) {
+  editingStock = stockId;
+  editingPerson = person;
+  selectedAction = null;
+
+  const key = `${stockId}|${person}`;
+  const existing = judgmentsMap[key];
+
+  modalTitle.textContent = stockName;
+  modalSubtitle.textContent = `👤 ${person} · ${fmtDate(currentDate)}`;
+
+  if (existing) {
+    selectedAction = existing.action;
+    modalReason.value = existing.reason || '';
+  } else {
+    modalReason.value = '';
+  }
+
+  $$('.decision-option').forEach(btn => {
+    btn.className = 'decision-option';
+    if (btn.dataset.action === selectedAction) {
+      btn.classList.add('selected-' + selectedAction);
+    }
+  });
+
+  const editable = isToday(currentDate) && person === currentPerson;
+  decisionGroup.style.display = editable ? 'flex' : 'none';
+  modalReason.readOnly = !editable;
+  $('#btnSave').style.display = editable ? '' : 'none';
+  if (!editable && !existing) modalReason.value = '暂无判断';
+
+  modalOverlay.classList.remove('hidden');
+}
+
+function closeModal() {
+  modalOverlay.classList.add('hidden');
+  editingStock = null;
+  editingPerson = null;
+  selectedAction = null;
+}
+
+async function saveJudgment() {
+  if (!selectedAction) return toastMsg('请选择 买入/卖出/观望');
+  if (!modalReason.value.trim()) return toastMsg('请填写判断理由');
+  if (!isToday(currentDate)) return toastMsg('只能修改今天的判断');
+
+  try {
+    const key = `${editingStock}|${editingPerson}`;
+    const existing = judgmentsMap[key];
+
+    if (existing) {
+      await apiPatch(`/rest/v1/judgments?id=eq.${existing.id}`, {
+        action: selectedAction,
+        reason: modalReason.value.trim(),
+        updated_at: new Date().toISOString()
+      });
+    } else {
+      await apiPost('/rest/v1/judgments', {
+        stock_id: editingStock,
+        date: currentDate,
+        person: editingPerson,
+        action: selectedAction,
+        reason: modalReason.value.trim()
+      });
+    }
+
+    closeModal();
+    toastMsg('保存成功');
+    await loadJudgments(currentDate);
+    render();
+    updateStats();
+  } catch(e) {
+    console.error('保存失败:', e);
+    toastMsg('保存失败：' + e.message);
+  }
+}
+
+// ==================== POLLING SYNC (代替 WebSocket) ====================
+// 每 10 秒自动拉取最新判断，实现"准实时"同步
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(async () => {
+    const before = Object.keys(judgmentsMap).length;
+    await loadJudgments(currentDate);
+    const after = Object.keys(judgmentsMap).length;
+    if (before !== after) {
+      render();
+      updateStats();
+    }
+  }, 10000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+// ==================== RENDER ====================
+function render() {
+  if (stocks.length === 0) {
+    stockList.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p>还没有添加股票</p>
+        <p style="font-size:0.85rem;color:var(--text-dim);margin-top:4px;">在顶部输入框中添加你的第一只股票</p>
+      </div>`;
+    return;
+  }
+
+  stockList.innerHTML = stocks.map(s => {
+    const stockId = s.id;
+    const code = s.code || '';
+    const name = s.name || '';
+
+    let cells = '';
+    for (const person of ['A','B']) {
+      const key = `${stockId}|${person}`;
+      const j = judgmentsMap[key];
+
+      if (j && j.action) {
+        const lbl = { buy:'买入', sell:'卖出', hold:'观望' }[j.action] || j.action;
+        const cls = { buy:'buy', sell:'sell', hold:'hold' }[j.action] || '';
+        cells += `
+          <div class="judgment-cell ${cls}" id="cell-${stockId}-${person}"
+               onclick="openModal(${stockId},'${escapeHtml(name)}','${person}')">
+            <div class="judgment-person">👤 ${person}</div>
+            <span class="judgment-decision decision-${cls}">${lbl}</span>
+            <div class="judgment-reason">${escapeHtml(j.reason || '')}</div>
+          </div>`;
+      } else {
+        cells += `
+          <div class="judgment-cell empty" id="cell-${stockId}-${person}"
+               onclick="openModal(${stockId},'${escapeHtml(name)}','${person}')">
+            <div class="judgment-person">👤 ${person}</div>
+            <div class="judgment-empty-text">${isToday(currentDate) ? '点击添加判断' : '未判断'}</div>
+          </div>`;
+      }
+    }
+
+    return `
+      <div class="stock-card">
+        <div class="stock-header">
+          <div class="stock-info">
+            <span class="stock-code">${escapeHtml(code)}</span>
+            <span class="stock-name">${escapeHtml(name)}</span>
+          </div>
+          <button class="btn-delete" onclick="event.stopPropagation();deleteStock(${stockId})" title="删除">🗑</button>
+        </div>
+        <div class="judgments">${cells}</div>
+      </div>`;
+  }).join('');
+
+  $('#addBar').style.display = '';
+  $('#footer').style.display = '';
+}
+
+function updateStats() {
+  $('#statTotal').textContent = stocks.length;
+  if (stocks.length === 0) {
+    $('#statJudgments').textContent = '—';
+    return;
+  }
+  let filled = 0;
+  for (const s of stocks) {
+    for (const p of ['A','B']) {
+      if (judgmentsMap[`${s.id}|${p}`]) filled++;
+    }
+  }
+  $('#statJudgments').innerHTML = `今日判断：<span>${filled}</span> / ${stocks.length * 2}`;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ==================== DATE NAVIGATION ====================
+function goToDate(date) {
+  currentDate = date;
+  dateInput.value = date;
+  loadAll();
+}
+
+// ==================== EVENT HANDLERS ====================
+$('#personSelect').addEventListener('click', (e) => {
+  const btn = e.target.closest('.person-btn');
+  if (!btn) return;
+  currentPerson = btn.dataset.person;
+  localStorage.setItem('stock_tracker_person', currentPerson);
+  $$('.person-btn').forEach(b => b.classList.toggle('active', b.dataset.person === currentPerson));
+});
+
+dateInput.addEventListener('change', () => { if (dateInput.value) goToDate(dateInput.value); });
+$('#btnPrev').addEventListener('click', () => goToDate(shiftDate(currentDate, -1)));
+$('#btnNext').addEventListener('click', () => goToDate(shiftDate(currentDate, 1)));
+$('#btnToday').addEventListener('click', () => goToDate(new Date().toISOString().slice(0,10)));
+
+$('#btnAdd').addEventListener('click', () => addStock($('#inputCode').value, $('#inputName').value));
+$('#inputCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#inputName').focus(); });
+$('#inputName').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addStock($('#inputCode').value, $('#inputName').value);
+});
+
+decisionGroup.addEventListener('click', (e) => {
+  const btn = e.target.closest('.decision-option');
+  if (!btn) return;
+  selectedAction = btn.dataset.action;
+  $$('.decision-option').forEach(b => {
+    b.className = 'decision-option';
+    if (b.dataset.action === selectedAction) b.classList.add('selected-' + selectedAction);
+  });
+});
+
+$('#btnCancel').addEventListener('click', closeModal);
+$('#btnSave').addEventListener('click', saveJudgment);
+modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+// ==================== INIT ====================
+async function init() {
+  dateInput.value = currentDate;
+  $$('.person-btn').forEach(b => b.classList.toggle('active', b.dataset.person === currentPerson));
+
+  try {
+    const r = await fetch(API.url + '/rest/v1/stocks?select=id&limit=1', {
+      headers: { 'apikey': API.key, 'Authorization': 'Bearer ' + API.key }
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    await r.json(); // just test, don't need the data
+    console.log('✅ Supabase OK');
+    $('#configNotice').classList.add('hidden');
+    startPolling();
+    loadAll();
+  } catch(e) {
+    console.error(e);
+    $('#configNotice').classList.remove('hidden');
+    stockList.innerHTML = '<div class="empty-state"><div class="empty-icon">🔌</div><p><strong>无法连接 Supabase</strong></p><p style="color:#f87171;margin-top:8px;">' + e.message + '</p><p style="font-size:0.78rem;color:var(--text-dim);margin-top:8px;">URL: ' + API.url + '</p></div>';
+  }
+}
+
+init();
+</script>
+
+<!--
+  ==================== SUPABASE 建表 SQL ====================
+  在 Supabase 控制台 → SQL Editor 中执行以下语句：
+
+  CREATE TABLE stocks (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    code TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+
+  CREATE TABLE judgments (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    stock_id BIGINT REFERENCES stocks(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    person TEXT NOT NULL CHECK (person IN ('A', 'B')),
+    action TEXT NOT NULL CHECK (action IN ('buy', 'sell', 'hold')),
+    reason TEXT DEFAULT '',
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (stock_id, date, person)
+  );
+
+  -- 启用实时同步
+  ALTER PUBLICATION supabase_realtime ADD TABLE judgments;
+
+  -- 允许匿名访问（开发用；如需安全可开启 RLS）
+  -- 在 Authentication → Settings → 关闭 "Enable email confirmations"
+  -- 在 SQL Editor:
+  ALTER TABLE stocks ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE judgments ENABLE ROW LEVEL SECURITY;
+
+  CREATE POLICY "Allow all on stocks" ON stocks FOR ALL USING (true) WITH CHECK (true);
+  CREATE POLICY "Allow all on judgments" ON judgments FOR ALL USING (true) WITH CHECK (true);
+-->
+</body>
+</html>
