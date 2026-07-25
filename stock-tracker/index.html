@@ -258,7 +258,7 @@ window.batchUpdateCategory=async function(){
   for(var i=0;i<stocks.length;i++){
     var s=stocks[i];var mkt=s.market||'sz';
     var cat=await fetchIndustry(s.code,mkt);
-    if(cat&&cat!==s.category){await patch('/rest/v1/stocks?id=eq.'+s.id,{category:cat});n++}
+    if(cat&&cat!=='个股'&&cat!==s.category){await patch('/rest/v1/stocks?id=eq.'+s.id,{category:cat});n++}
     await new Promise(function(r){setTimeout(r,300)});
   }
   toast('已更新 '+n+' 只');await loadM1();renderM1();
@@ -324,7 +324,7 @@ async function addStock(){
   const code=ce.value.trim(),name=ne.value.trim(),mkt=me?me.value:'sz';
   if(!code||!name)return toast('请输入股票代码和名称');
   var cat=guessCategory(code,mkt);
-  try{var ind=await fetchIndustry(code,mkt);if(ind)cat=ind}catch(e){}
+  try{var ind=await fetchIndustry(code,mkt);if(ind&&ind!=='个股')cat=ind}catch(e){}
   try{await post('/rest/v1/stocks',{code,name,market:mkt,active_from:today(),category:cat});ce.value='';ne.value='';const nh=Q('#nameHint');if(nh)nh.textContent='';toast('添加成功');await loadM1();renderM1();}catch(e){toast('添加失败：'+e.message)}
 }
 async function stopStock(id){
@@ -344,14 +344,14 @@ async function savePlan(sid, savePerson){
   if(ex){body.a_decision=ex.a_decision||'';body.b_decision=ex.b_decision||'';body.a_view=ex.a_view||'';body.b_view=ex.b_view||'';body.consensus=ex.consensus||''}
   // Update current person's values
   if(savePerson==='A'){
-    const adEl=Q('#'+pfx+'_ad'),avEl=Q('#'+pfx+'_av');
+    var adEl=Q('#'+pfx+'_ad'),avEl=Q('#'+pfx+'_av'),aaEl=Q('#'+pfx+'_a_amt');
     if(!adEl||!avEl)return toast('找不到表单元素，请刷新');
-    body.a_decision=adEl.value;body.a_view=avEl.value.trim();
+    body.a_decision=adEl.value;body.a_view=avEl.value.trim();body.a_amount=aaEl?aaEl.value.trim():'';
   }
   if(savePerson==='B'){
-    const bdEl=Q('#'+pfx+'_bd'),bvEl=Q('#'+pfx+'_bv');
+    var bdEl=Q('#'+pfx+'_bd'),bvEl=Q('#'+pfx+'_bv'),baEl=Q('#'+pfx+'_b_amt');
     if(!bdEl||!bvEl)return toast('找不到表单元素，请刷新');
-    body.b_decision=bdEl.value;body.b_view=bvEl.value.trim();
+    body.b_decision=bdEl.value;body.b_view=bvEl.value.trim();body.b_amount=baEl?baEl.value.trim():'';
   }
   if(savePerson==='consensus'){
     const csEl=Q('#'+pfx+'_cs');if(!csEl)return;
@@ -411,7 +411,7 @@ function renderM1Tab(){
       h+='<div class=\"card\"><h3><span>'+esc(s.code)+' <span class=\"cname\">'+esc(s.name)+'</span>'+(s.price?' <span style=\"color:var(--buy);font-weight:700;font-size:.85rem\">¥'+s.price.toFixed(2)+'</span>':'')+'</span><span><button class=\"btn btn-sm btn-out kline-toggle\" data-kid=\"'+s.id+'\">📊 K线</button> <button class=\"btn btn-sm btn-danger\" data-stop=\"'+s.id+'\">停追</button> <button class=\"btn btn-sm\" style=\"background:transparent;color:var(--td);border:1px solid var(--b)\" data-del=\"'+s.id+'\">删除</button></span></h3><div class=\"kline-wrap\" id=\"kline_'+s.id+'\">'+kh+'</div>';
       if(activeTab==='plan'&&plan){
         h+='<div style=\"margin-top:8px;padding:8px;background:rgba(99,102,241,.08);border-radius:7px;border-left:3px solid var(--acc)\"><div style=\"font-size:.75rem;color:var(--tm);margin-bottom:4px\">📌 今日操作计划</div>';
-        if(plan.a_decision||plan.b_decision)h+='<div style=\"font-size:.78rem;margin-bottom:3px\">👤梦：<b>'+esc(DECISIONS[plan.a_decision]||'未填')+'</b> 👤慧：<b>'+esc(DECISIONS[plan.b_decision]||'未填')+'</b></div>';
+        if(plan.a_decision||plan.b_decision){var aTxt=esc(DECISIONS[plan.a_decision]||'未填'),bTxt=esc(DECISIONS[plan.b_decision]||'未填');if(plan.a_amount)aTxt+=' '+plan.a_amount+'万';if(plan.b_amount)bTxt+=' '+plan.b_amount+'万';h+='<div style=\"font-size:.78rem;margin-bottom:3px\">👤梦：<b>'+aTxt+'</b> 👤慧：<b>'+bTxt+'</b></div>';}
         if(plan.consensus)h+='<div style=\"font-size:.78rem;color:var(--tm);margin-top:4px;padding-top:4px;border-top:1px solid var(--b)\"><b>共识：</b>'+esc(plan.consensus)+'</div>';
         h+='</div>';
         var pf2='exec_'+plan.id;
@@ -455,10 +455,11 @@ async function renderJournalTab(){
       h.push('<div class="col"><h4>👤 A 的观点</h4>');
       if(person==='A'){
         h.push('<div class="dec-btns" id="'+pfx+'_abtns">');
-        for(var k in DECISIONS)h.push('<button class="dec-btn'+(ad===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_ad|'+k+'">'+DECISIONS[k]+'</button>');
+        for(var k in DECISIONS)h.push('<button class="dec-btn'+(ad===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_ad|'+k+'" onclick="var a=document.getElementById(\''+pfx+'_a_amt_div\');if(a)a.style.display=(\''+k+'\'===\'buy\'||\''+k+'\'===\'sell\')?\'block\':\'none\'">'+DECISIONS[k]+'</button>');
         h.push('</div>');
         h.push('<input type="hidden" id="'+pfx+'_ad" value="'+esc(ad)+'">');
         h.push('<textarea id="'+pfx+'_av" placeholder="A的分析理由...">'+esc(plan?plan.a_view||'':'')+'</textarea>');
+        h.push('<div id="'+pfx+'_a_amt_div" style="margin-top:4px;display:block"><input id="'+pfx+'_a_amt" placeholder="金额(万)" style="width:100px" value="'+esc(plan?plan.a_amount||'':'')+'"></div>');
         h.push('<div style="margin-top:6px"><button class="btn btn-sm" data-save="'+s.id+'|A">💾 保存A的观点</button>'+(aSaved?' <span class="tag tag-followed">已保存</span>':'')+'</div>');
       }else{
         h.push('<div style="font-size:.85rem;color:var(--tm)">'+(ad?esc(DECISIONS[ad]||ad):'未填写')+'</div>');
@@ -468,10 +469,11 @@ async function renderJournalTab(){
       h.push('<div class="col"><h4>👤 B 的观点</h4>');
       if(person==='B'){
         h.push('<div class="dec-btns" id="'+pfx+'_bbtns">');
-        for(var k in DECISIONS)h.push('<button class="dec-btn'+(bd===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_bd|'+k+'">'+DECISIONS[k]+'</button>');
+        for(var k in DECISIONS)h.push('<button class="dec-btn'+(bd===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_bd|'+k+'" onclick="var a=document.getElementById(\''+pfx+'_b_amt_div\');if(a)a.style.display=(\''+k+'\'===\'buy\'||\''+k+'\'===\'sell\')?\'block\':\'none\'">'+DECISIONS[k]+'</button>');
         h.push('</div>');
         h.push('<input type="hidden" id="'+pfx+'_bd" value="'+esc(bd)+'">');
         h.push('<textarea id="'+pfx+'_bv" placeholder="B的分析理由...">'+esc(plan?plan.b_view||'':'')+'</textarea>');
+        h.push('<div id="'+pfx+'_b_amt_div" style="margin-top:4px;display:block"><input id="'+pfx+'_b_amt" placeholder="金额(万)" style="width:100px" value="'+esc(plan?plan.b_amount||'':'')+'"></div>');
         h.push('<div style="margin-top:6px"><button class="btn btn-sm" data-save="'+s.id+'|B">💾 保存B的观点</button>'+(bSaved?' <span class="tag tag-followed">已保存</span>':'')+'</div>');
       }else{
         h.push('<div style="font-size:.85rem;color:var(--tm)">'+(bd?esc(DECISIONS[bd]||bd):'未填写')+'</div>');
@@ -553,7 +555,7 @@ function bindM1Events(){
   QA('[data-save]').forEach(b=>b.onclick=function(){const[sid,p]=this.dataset.save.split('|');savePlan(parseInt(sid),p)});
   QA('[data-exec]').forEach(b=>b.onclick=function(){const[p,f]=this.dataset.exec.split('|');const ff=f==='true';if(!ff){const d=Q('#exec_'+p+'_dr_div');if(d)d.style.display='block'}else{const d=Q('#exec_'+p+'_dr_div');if(d)d.style.display='none'}logExec(parseInt(p),ff)});
   QA('.kline-toggle').forEach(b=>b.onclick=function(){const w=Q('#kline_'+this.dataset.kid);if(w){if(w.classList.contains('show')){w.classList.remove('show');this.textContent='📊 K线'}else{w.classList.add('show');this.textContent='📊 收起'}}});
-  QA('[data-dclick]').forEach(b=>b.onclick=function(){const[t,v]=this.dataset.dclick.split('|');Q('#'+t).value=v;const p=this.parentElement;p.querySelectorAll('.dec-btn').forEach(x=>{x.className='dec-btn';if(x.dataset.dclick.split('|')[1]===v)x.classList.add('sel-'+v)})});
+  QA('[data-dclick]').forEach(function(b){b.onclick=function(){var t=this.dataset.dclick.split('|');Q('#'+t[0]).value=t[1];var p=this.parentElement;p.querySelectorAll('.dec-btn').forEach(function(x){x.className='dec-btn';if(x.dataset.dclick.split('|')[1]===t[1])x.classList.add('sel-'+t[1])});var amtId=t[0].replace(/d$/,'')+'_amt_div';var amtDiv=Q('#'+amtId);if(amtDiv)amtDiv.style.display=(t[1]==='buy'||t[1]==='sell')?'block':'none'}});
   QA('[data-click]').forEach(c=>c.onclick=function(){const[id,name,who]=this.dataset.click.split('|');openModal(parseInt(id),name,who)});
 }
 
