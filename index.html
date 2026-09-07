@@ -472,6 +472,10 @@ async function renderJournalTab(){
       h.push('<h3><span>'+esc(s.code)+' <span class="cname">'+esc(s.name)+'</span></span>');
       h.push('<span><button class="btn btn-sm btn-danger" data-stop="'+s.id+'">停追</button> ');
       h.push('<button class="btn btn-sm" style="background:transparent;color:var(--td);border:1px solid var(--b)" data-del="'+s.id+'">删除</button></span></h3>');
+      var prevPlan=plans.find(function(p){return p.stock_id===s.id&&p.plan_date===date});
+      var prevA=prevPlan?(prevPlan.a_decision||''):'',prevB=prevPlan?(prevPlan.b_decision||''):'';
+      var held=holdings.find(function(h){return h.code===s.code});
+      h.push('<div style="font-size:.72rem;color:var(--tm);margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,.15);border-radius:6px">昨日观点：A '+(prevA?esc(DECISIONS[prevA]||prevA):'未填')+' · B '+(prevB?esc(DECISIONS[prevB]||prevB):'未填')+'　|　'+(held?'<span style="color:var(--buy);font-weight:600">持仓</span>':'<span style="color:var(--td)">无持仓</span>')+'</div>');
       h.push('<div class="views-grid">');
       h.push('<div class="col"><h4>👤 A 的观点</h4>');
       if(person==='A'){
@@ -851,7 +855,7 @@ async function init(){
 
   try{
     const r=await fetch(API.url+'/rest/v1/stocks?select=id&limit=1',{headers:HG});if(!r.ok)throw new Error('');
-    await loadM1();await renderM1();await loadM2();await renderM2();await loadM3();await renderM3();
+    await loadM1();await loadM2();await renderM1();await renderM2();await loadM3();await renderM3();
   }catch(e){Q('#m1').innerHTML='<div class="empty"><div class="icon">🔌</div><p>无法连接 Supabase</p><p style="color:#f87171;font-size:.8rem;margin-top:4px">'+e.message+'</p></div>';}
 }
 async function goDate(d){date=d;Q('#dInput').value=d;await loadM1();await renderM1();await loadM3();await renderM3();}
