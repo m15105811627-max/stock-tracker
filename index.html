@@ -475,7 +475,9 @@ async function renderJournalTab(){
       var prevPlan=plans.find(function(p){return p.stock_id===s.id&&p.plan_date===date});
       var prevA=prevPlan?(prevPlan.a_decision||''):'',prevB=prevPlan?(prevPlan.b_decision||''):'';
       var held=holdings.find(function(h){return h.code===s.code});
-      h.push('<div style="font-size:.72rem;color:var(--tm);margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,.15);border-radius:6px">昨日观点：A '+(prevA?esc(DECISIONS[prevA]||prevA):'未填')+' · B '+(prevB?esc(DECISIONS[prevB]||prevB):'未填')+'　|　'+(held?'<span style="color:var(--buy);font-weight:600">持仓</span>':'<span style="color:var(--td)">无持仓</span>')+'</div>');
+      var heldInfo='';
+      if(held){var heldCost=held.shares*held.avg_cost;heldInfo='<span style="color:var(--buy);font-weight:600">持仓</span> <span style="color:var(--tm)">成本价 '+held.avg_cost.toFixed(2)+' · 成本 '+(heldCost/10000).toFixed(1)+'万</span>'}else{heldInfo='<span style="color:var(--td)">无持仓</span>'}
+      h.push('<div style="font-size:.72rem;color:var(--tm);margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,.15);border-radius:6px">昨日观点：A '+(prevA?esc(DECISIONS[prevA]||prevA):'未填')+' · B '+(prevB?esc(DECISIONS[prevB]||prevB):'未填')+'　|　'+heldInfo+'</div>');
       h.push('<div class="views-grid">');
       h.push('<div class="col"><h4>👤 A 的观点</h4>');
       if(person==='A'){
