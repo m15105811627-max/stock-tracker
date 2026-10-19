@@ -344,14 +344,14 @@ async function savePlan(sid, savePerson){
   if(ex){body.a_decision=ex.a_decision||'';body.b_decision=ex.b_decision||'';body.a_view=ex.a_view||'';body.b_view=ex.b_view||'';body.consensus=ex.consensus||''}
   // Update current person's values
   if(savePerson==='A'){
-    var adEl=Q('#'+pfx+'_ad'),avEl=Q('#'+pfx+'_av'),aaEl=Q('#'+pfx+'_a_amt');
-    if(!adEl||!avEl)return toast('找不到表单元素，请刷新');
-    body.a_decision=adEl.value;body.a_view=avEl.value.trim();body.a_amount=aaEl?aaEl.value.trim():'';
+    var adEl=Q('#'+pfx+'_ad'),aaEl=Q('#'+pfx+'_a_amt');
+    if(!adEl)return toast('找不到表单元素，请刷新');
+    body.a_decision=adEl.value;body.a_amount=aaEl?aaEl.value.trim():'';
   }
   if(savePerson==='B'){
-    var bdEl=Q('#'+pfx+'_bd'),bvEl=Q('#'+pfx+'_bv'),baEl=Q('#'+pfx+'_b_amt');
-    if(!bdEl||!bvEl)return toast('找不到表单元素，请刷新');
-    body.b_decision=bdEl.value;body.b_view=bvEl.value.trim();body.b_amount=baEl?baEl.value.trim():'';
+    var bdEl=Q('#'+pfx+'_bd'),baEl=Q('#'+pfx+'_b_amt');
+    if(!bdEl)return toast('找不到表单元素，请刷新');
+    body.b_decision=bdEl.value;body.b_amount=baEl?baEl.value.trim():'';
   }
   if(savePerson==='consensus'){
     const csEl=Q('#'+pfx+'_cs');if(!csEl)return;
@@ -430,6 +430,7 @@ function renderM1Tab(){
       if(activeTab==='plan'&&plan){
         h+='<div style=\"margin-top:8px;padding:8px;background:rgba(99,102,241,.08);border-radius:7px;border-left:3px solid var(--acc)\"><div style=\"font-size:.75rem;color:var(--tm);margin-bottom:4px\">📌 今日操作计划</div>';
         if(plan.a_decision||plan.b_decision){var aTxt=esc(DECISIONS[plan.a_decision]||'未填'),bTxt=esc(DECISIONS[plan.b_decision]||'未填');if(plan.a_amount)aTxt+=' '+plan.a_amount+'万';if(plan.b_amount)bTxt+=' '+plan.b_amount+'万';h+='<div style=\"font-size:.78rem;margin-bottom:3px\">👤梦：<b>'+aTxt+'</b> 👤慧：<b>'+bTxt+'</b></div>';}
+        if(plan.tech_result){var tcol={买入:'var(--buy)',持有:'var(--buy)',观察:'var(--hold)',卖出:'var(--sell)',空仓:'var(--sell)'}[plan.tech_result]||'var(--t)';h+='<div style=\"font-size:.78rem;margin-top:4px\"><b>🔬 技术面：</b><span style=\"color:'+tcol+';font-weight:700\">'+esc(plan.tech_result)+'</span>'+(plan.tech_stop?' <span style=\"color:var(--tm)\">止损 '+esc(plan.tech_stop)+'</span>':'')+'</div>';}
         if(plan.consensus)h+='<div style=\"font-size:.78rem;color:var(--tm);margin-top:4px;padding-top:4px;border-top:1px solid var(--b)\"><b>共识：</b>'+esc(plan.consensus)+'</div>';
         h+='</div>';
         var pf2='exec_'+plan.id;
@@ -444,6 +445,123 @@ function renderM1Tab(){
   }
   return h;
 }
+
+// ─── 技术面评分决策树 ───
+function calcTechScore(a,b,c,d,e,f,g,h){
+  var R={result:'观察',stop:''};
+  // 第0层：一票否决
+  if(a==='跌破绿线'){R.result='空仓';return R}
+  // 背离确认
+  var topConfirm=(g==='顶背离'&&f==='红缩');
+  var bottomConfirm=(g==='底背离'&&(f==='绿缩'||e==='金叉'));
+  // 第1层：B=向下
+  if(b==='向下'){
+    if(c==='上沿'){R.result='卖出';return R}
+    if(bottomConfirm&&h==='峰上'&&c!=='上沿'){R.result='观察';R.stop='绿线';return R}
+    if(f==='绿缩'&&h!=='峰下'){R.result='观察';return R}
+    if(h==='峰下'){R.result='空仓';return R}
+    R.result='空仓';return R;
+  }
+  // 第2层：B=走平
+  if(b==='走平'){
+    if(topConfirm){R.result='卖出';return R}
+    if(bottomConfirm&&h==='峰上'){R.result='观察';return R}
+    if(h==='峰下'){R.result='空仓';return R}
+    if(c==='上沿'){
+      if(e==='死叉'){R.result='卖出';return R}
+      if(f==='红缩'||f==='绿扩'){R.result='卖出';return R}
+      if(f==='红扩'){R.result='观察';return R}
+      return R;
+    }
+    if(c==='内部'){
+      if(e==='DIF上'&&(f==='红缩'||f==='红扩')){R.result='持有';return R}
+      return R;
+    }
+    if(c==='下沿'){
+      if(a==='靠近绿线'){R.result='观察';return R}
+      if(e==='DIF上'&&f==='红扩'&&(h==='峰上'||h==='峰内')){R.result='买入';R.stop='紫线';return R}
+      if(e==='DIF下'&&f==='绿扩'){R.result='观察';return R}
+      return R;
+    }
+    return R;
+  }
+  // 第3层：B=向上
+  if(topConfirm){R.result='卖出';return R}
+  if(g==='顶背离'){R.result='观察';return R}
+  if(bottomConfirm&&c==='下沿'){R.result='买入';R.stop='紫线';return R}
+  if(bottomConfirm&&c!=='下沿'){R.result='观察';return R}
+  if(d==='有效突破'){
+    if(e==='DIF下'&&f==='绿扩'){R.result='卖出';return R}
+    if(e==='DIF下'&&f==='绿缩'){R.result='观察';return R}
+    if(e==='死叉'){R.result='卖出';return R}
+    if(e==='金叉'){R.result='观察';return R}
+    if(e==='DIF上'&&f==='红扩'&&(h==='峰上'||h==='峰内')){R.result='买入';R.stop='黑线';return R}
+    if(e==='DIF上'&&f==='红扩'&&h==='峰下'){R.result='观察';return R}
+    if(e==='DIF上'&&f==='红缩'){R.result='持有';return R}
+    return R;
+  }
+  if(d==='单日刺破'){
+    if(e==='死叉'){R.result='卖出';return R}
+    if(f==='绿扩'){R.result='卖出';return R}
+    if(f==='绿缩'){R.result='观察';return R}
+    if(f==='红缩'&&h==='峰下'){R.result='卖出';return R}
+    if(e==='DIF上'&&f==='红扩'){R.result='观察';return R}
+    return R;
+  }
+  if(d==='靠近未突破'){
+    if(c==='上沿'){
+      if(e==='死叉'){R.result='卖出';return R}
+      if(f==='红缩'&&h==='峰下'){R.result='卖出';return R}
+      if(e==='DIF上'&&f==='红扩'&&(h==='峰上'||h==='峰内')){R.result='观察';return R}
+      return R;
+    }
+    if(c==='内部'){
+      if(f==='红缩'&&h==='峰内'){R.result='持有';return R}
+      if(e==='死叉'){R.result='观察';return R}
+      if(f==='绿缩'){R.result='观察';return R}
+      return R;
+    }
+    if(c==='下沿'){
+      if(e==='金叉'&&f==='红扩'){R.result='买入';R.stop='紫线';return R}
+      if(e==='DIF上'&&f==='红扩'&&(h==='峰上'||h==='峰内')){R.result='买入';R.stop='紫线';return R}
+      if(e==='DIF下'&&f==='绿扩'&&h==='峰下'){R.result='观察';return R}
+      return R;
+    }
+    return R;
+  }
+  if(d==='远离黑线'){
+    if(e==='DIF上'&&(f==='红扩'||f==='红缩')){R.result='持有';return R}
+    if(e==='金叉'&&f==='红扩'){R.result='持有';return R}
+    if(e==='金叉'&&f==='红缩'){R.result='观察';return R}
+    if(e==='死叉'){R.result='观察';return R}
+    if(e==='DIF下'&&f==='绿扩'){R.result='卖出';return R}
+    if(e==='DIF下'&&f==='绿缩'){R.result='观察';return R}
+    return R;
+  }
+  return R;
+}
+
+// ─── 技术面评分：自动计算+保存 ───
+window.calcTech=function(sid){
+  var pfx='tech_'+sid;
+  var a=Q('#'+pfx+'_a').value,b=Q('#'+pfx+'_b').value,c=Q('#'+pfx+'_c').value,d=Q('#'+pfx+'_d').value;
+  var e=Q('#'+pfx+'_e').value,f=Q('#'+pfx+'_f').value,g=Q('#'+pfx+'_g').value,h=Q('#'+pfx+'_h').value;
+  if(!a||!b||!c||!d||!e||!f||!g||!h){Q('#'+pfx+'_res').innerHTML='<span style="color:var(--td)">请选完8项</span>';return}
+  var R=calcTechScore(a,b,c,d,e,f,g,h);
+  var resColor={买入:'var(--buy)',持有:'var(--buy)',观察:'var(--hold)',卖出:'var(--sell)',空仓:'var(--sell)'}[R.result]||'var(--t)';
+  Q('#'+pfx+'_res').innerHTML='<span style="color:'+resColor+';font-weight:700;font-size:1rem">'+R.result+'</span>'+(R.stop?' <span style="color:var(--tm);font-size:.75rem">止损：'+R.stop+'</span>':'');
+};
+window.saveTech=async function(sid){
+  var pfx='tech_'+sid;
+  var a=Q('#'+pfx+'_a').value,b=Q('#'+pfx+'_b').value,c=Q('#'+pfx+'_c').value,d=Q('#'+pfx+'_d').value;
+  var e=Q('#'+pfx+'_e').value,f=Q('#'+pfx+'_f').value,g=Q('#'+pfx+'_g').value,h=Q('#'+pfx+'_h').value;
+  if(!a||!b||!c||!d||!e||!f||!g||!h)return toast('请选完8项');
+  var R=calcTechScore(a,b,c,d,e,f,g,h);
+  var ex=plans.find(function(p){return p.stock_id===sid&&p.plan_date===shift(date,1)});
+  var body={stock_id:sid,plan_date:shift(date,1),tech_a:a,tech_b:b,tech_c:c,tech_d:d,tech_e:e,tech_f:f,tech_g:g,tech_h:h,tech_result:R.result,tech_stop:R.stop||''};
+  try{if(ex)await patch('/rest/v1/daily_plans?id=eq.'+ex.id,body);else await post('/rest/v1/daily_plans',body);toast('技术面评分已保存：'+R.result);await loadM1();renderM1();}catch(err){toast('保存失败：'+err.message)}
+};
+
 async function renderJournalTab(){
   let h=[];
   h.push('<div class="row" style="margin-bottom:4px">');
@@ -477,7 +595,25 @@ async function renderJournalTab(){
       var held=holdings.find(function(h){return h.code===s.code});
       var heldInfo='';
       if(held){var heldCost=held.shares*held.avg_cost;heldInfo='<span style="color:var(--buy);font-weight:600">持仓</span> <span style="color:var(--tm)">成本价 '+held.avg_cost.toFixed(2)+' · 成本 '+(heldCost/10000).toFixed(1)+'万</span>'}else{heldInfo='<span style="color:var(--td)">无持仓</span>'}
-      h.push('<div style="font-size:.72rem;color:var(--tm);margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,.15);border-radius:6px">昨日观点：A '+(prevA?esc(DECISIONS[prevA]||prevA):'未填')+' · B '+(prevB?esc(DECISIONS[prevB]||prevB):'未填')+'　|　'+heldInfo+'</div>');
+      h.push('<div style="font-size:.72rem;color:var(--tm);margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,.15);border-radius:6px">昨日观点：A '+(prevA?esc(DECISIONS[prevA]||prevA):'未填')+' · B '+(prevB?esc(DECISIONS[prevB]||prevB):'未填')+'　|　'+heldInfo+ (prevPlan&&prevPlan.tech_result?' <span style=\"color:var(--acc)\">🔬'+esc(prevPlan.tech_result)+'</span>':'') +'</div>');
+      // 技术面评分（自动展开，分类）
+      var tcur={a:plan?plan.tech_a||"":"",b:plan?plan.tech_b||"":"",c:plan?plan.tech_c||"":"",d:plan?plan.tech_d||"":"",e:plan?plan.tech_e||"":"",f:plan?plan.tech_f||"":"",g:plan?plan.tech_g||"":"",h:plan?plan.tech_h||"":""};
+      var tgroups=[{name:'薛斯通道',items:[['a','A绿线',['远离绿线','靠近绿线','跌破绿线']],['b','B通道',['向下','走平','向上']],['c','C位置',['下沿','内部','上沿']],['d','D黄黑',['远离黑线','靠近未突破','单日刺破','有效突破']]]},{name:'MACD',items:[['e','E DIF',['DIF下','金叉','死叉','DIF上']],['f','F柱体',['绿扩','绿缩','红缩','红扩']],['g','G背离',['无','顶背离','底背离']]]},{name:'筹码',items:[['h','H筹码峰',['峰上','峰内','峰下']]]}];
+      h.push('<div style="margin-top:8px;padding:8px;background:rgba(99,102,241,.06);border-radius:6px">');
+      h.push('<div style="font-size:.78rem;color:var(--acc);font-weight:600;margin-bottom:4px">🔬 技术面评分'+(plan&&plan.tech_result?' <span style="color:var(--t)">→ '+esc(plan.tech_result)+'</span>':'')+'</div>');
+      for(var gi=0;gi<tgroups.length;gi++){var grp=tgroups[gi];
+        h.push('<div style="font-size:.68rem;color:var(--hold);margin:6px 0 2px;font-weight:600">'+grp.name+'</div>');
+        h.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">');
+        for(var ii=0;ii<grp.items.length;ii++){var it=grp.items[ii];
+          h.push('<div style="display:flex;align-items:center;gap:4px;font-size:.72rem;color:var(--tm)"><span style="width:52px">'+it[1]+'</span><select id="tech_'+s.id+'_'+it[0]+'" onchange="calcTech('+s.id+')" style="flex:1;padding:4px 6px;font-size:.72rem;background:rgba(0,0,0,.3);border:1px solid var(--b);color:var(--t);border-radius:6px"><option value="">—</option>');
+          for(var oi=0;oi<it[2].length;oi++)h.push('<option value="'+it[2][oi]+'"'+(tcur[it[0]]===it[2][oi]?' selected':'')+'>'+it[2][oi]+'</option>');
+          h.push('</select></div>');
+        }
+        h.push('</div>');
+      }
+      h.push('<div id="tech_'+s.id+'_res" style="margin-top:6px;font-size:.9rem"></div>');
+      h.push('<div style="margin-top:6px"><button class="btn btn-sm" onclick="saveTech('+s.id+')">💾 保存技术面</button></div>');
+      h.push('</div>');
       h.push('<div class="views-grid">');
       h.push('<div class="col"><h4>👤 A 的观点</h4>');
       if(person==='A'){
@@ -485,7 +621,6 @@ async function renderJournalTab(){
         for(var k in DECISIONS)h.push('<button class="dec-btn'+(ad===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_ad|'+k+'" onclick="var a=document.getElementById(\''+pfx+'_a_amt_div\');if(a)a.style.display=(\''+k+'\'===\'buy\'||\''+k+'\'===\'sell\')?\'block\':\'none\'">'+DECISIONS[k]+'</button>');
         h.push('</div>');
         h.push('<input type="hidden" id="'+pfx+'_ad" value="'+esc(ad)+'">');
-        h.push('<textarea id="'+pfx+'_av" placeholder="A的分析理由...">'+esc(plan?plan.a_view||'':'')+'</textarea>');
         h.push('<div id="'+pfx+'_a_amt_div" style="margin-top:4px;display:block"><input id="'+pfx+'_a_amt" placeholder="金额(万)" style="width:100px" value="'+esc(plan?plan.a_amount||'':'')+'"></div>');
         h.push('<div style="margin-top:6px"><button class="btn btn-sm" data-save="'+s.id+'|A">💾 保存A的观点</button>'+(aSaved?' <span class="tag tag-followed">已保存</span>':'')+'</div>');
       }else{
@@ -499,7 +634,6 @@ async function renderJournalTab(){
         for(var k in DECISIONS)h.push('<button class="dec-btn'+(bd===k?' sel-'+k:'')+'" data-dclick="'+pfx+'_bd|'+k+'" onclick="var a=document.getElementById(\''+pfx+'_b_amt_div\');if(a)a.style.display=(\''+k+'\'===\'buy\'||\''+k+'\'===\'sell\')?\'block\':\'none\'">'+DECISIONS[k]+'</button>');
         h.push('</div>');
         h.push('<input type="hidden" id="'+pfx+'_bd" value="'+esc(bd)+'">');
-        h.push('<textarea id="'+pfx+'_bv" placeholder="B的分析理由...">'+esc(plan?plan.b_view||'':'')+'</textarea>');
         h.push('<div id="'+pfx+'_b_amt_div" style="margin-top:4px;display:block"><input id="'+pfx+'_b_amt" placeholder="金额(万)" style="width:100px" value="'+esc(plan?plan.b_amount||'':'')+'"></div>');
         h.push('<div style="margin-top:6px"><button class="btn btn-sm" data-save="'+s.id+'|B">💾 保存B的观点</button>'+(bSaved?' <span class="tag tag-followed">已保存</span>':'')+'</div>');
       }else{
